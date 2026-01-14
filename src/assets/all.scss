@@ -1,0 +1,8 @@
+@import "bootstrap/scss/functions";
+
+// 引入客製化變數檔案
+@import "./variables";
+
+// 引入完整Bootstrap的SCSS檔案
+@import "bootstrap/scss/bootstrap";
+@import "_style";
