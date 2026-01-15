@@ -1,7 +1,10 @@
 import axios from "axios";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import reactLogo from "./assets/react.svg";
 import viteLogo from "/vite.svg";
+import "bootstrap/dist/css/bootstrap.min.css";
+import "bootstrap/dist/js/bootstrap.bundle.min.js";
+import * as bootstrap from "bootstrap";
 import "./App.css";
 
 // env 變數不要加""及;
@@ -19,10 +22,10 @@ const emptyProduct = {
   imagesUrl: [],
   price: 0,
   origin_price: 0,
-  unit: "元",
+  unit: "個",
   is_enabled: 0,
+  storageNum: 0,
 };
-
 function App() {
   // 解構 useState 回傳的結果：formData 是目前的資料狀態，setFormData 是更新formData的方法(function)，useState 內的值是預設資料狀態
   // 要記得post 內的參數要和後端 API 規定的欄位名稱相同
@@ -32,11 +35,36 @@ function App() {
   });
   const [isAuth, setIsAuth] = useState(false);
   const [products, setProducts] = useState([]);
+
+  // 設定表單參數，不要跟setTempProduct共用會報錯
+  const [formProduct, setFormProduct] = useState(emptyProduct);
   // 第二層資料modal
   const [tempProduct, setTempProduct] = useState(null);
   const handleOpenModal = (product) => {
     setTempProduct(product);
   };
+  // 按鈕綁定dom
+  const modalRef = useRef(null);
+  // 與控制表單相關
+  const formModalRef = useRef(null);
+  const [modalType, setModalType] = useState("");
+  // JS開關modal
+  const openFormModal = (product = emptyProduct, type) => {
+    setFormProduct({ ...product });
+    setModalType(type);
+    formModalRef.current.show();
+  };
+  const closeFormModal = () => {
+    formModalRef.current.hide();
+  };
+  // 記得要加空陣列
+  // 因為登入的三元會取不到DOM，先加判斷式
+  useEffect(() => {
+    if (!isAuth) return;
+    if (!modalRef.current) return;
+
+    formModalRef.current = new bootstrap.Modal(modalRef.current);
+  }, [isAuth]);
 
   const getData = async () => {
     try {
@@ -103,28 +131,44 @@ function App() {
     }
   }
 
-  // btn新增功能
-  async function handleAdd() {
-    try {
-      const response = await axios.post(
-        `${API_BASE}/api/${API_PATH}/admin/product`,
-        { data: tempProduct }
-      );
-      getData();
-    } catch (error) {}
-  }
+  // 新增、編輯表單
+  const handleModalInputChange = (e) => {
+    // 解構e.target裡面的key
+    const { name, value, type, checked } = e.target;
+    setFormProduct((formProduct) => ({
+      ...formProduct,
+      // 因為有checkbox所以用三元，但價格是數字
+      // 不能只用[name]: type === "checkbox" ? checked : value,
+      [name]:
+        type === "checkbox"
+          ? checked
+          : type === "number"
+          ? Number(value)
+          : value,
+    }));
+  };
 
-  // btn編輯功能
-  async function handleEdit(product) {
+  // btn新增跟編輯功能不要拆開，會比較好維護
+  async function handleSubmit() {
     try {
-      const response = await axios.put(
-        `${API_BASE}/api/${API_PATH}/admin/product/${product.id}`,
-        { data: product }
-      );
-      console.log(product);
+      // 如果是新增，用POST呼叫API
+      if (modalType === "create") {
+        await axios.post(`${API_BASE}/api/${API_PATH}/admin/product`, {
+          data: formProduct,
+        });
+      } else if (modalType === "edit") {
+        // 如果是修改，用put呼叫API
+        await axios.put(
+          `${API_BASE}/api/${API_PATH}/admin/product/${formProduct.id}`,
+          { data: formProduct }
+        );
+      }
+
       getData();
+      closeFormModal();
+      setFormProduct(emptyProduct);
     } catch (error) {
-      console.error(error);
+      alert(error.response?.data?.message || "操作失敗");
     }
   }
 
@@ -137,6 +181,7 @@ function App() {
       getData();
     } catch (error) {
       console.error(error);
+      alert(error.response?.data?.message || "操作失敗");
     }
   }
 
@@ -174,23 +219,20 @@ function App() {
           <div className="d-flex mb-2">
             <button
               className="btn btn-success ms-auto"
-              data-bs-toggle="modal"
-              data-bs-target="#addForm"
               onClick={() => {
-                setTempProduct(emptyProduct);
+                openFormModal(emptyProduct, "create");
               }}
             >
               新增產品
             </button>
             {/* modal */}
             <div
-              className="modal fade  "
+              className="modal fade"
+              ref={modalRef}
               id="addForm"
               data-bs-backdrop="static"
               data-bs-keyboard="false"
               tabIndex="-1"
-              aria-labelledby="addForm"
-              aria-hidden="true"
             >
               <div className="modal-dialog modal-dialog-centered modal-xl">
                 <div className="modal-content">
@@ -203,92 +245,184 @@ function App() {
                       className="btn-close"
                       data-bs-dismiss="modal"
                       aria-label="Close"
+                      onClick={openFormModal}
                     ></button>
                   </div>
                   <div className="modal-body d-flex">
-                    <div className="mb-3 me-4 text-start">
-                      <label htmlFor="inputUrl" className="form-label">
-                        主圖<span className="text-danger">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        id="inputUrl"
-                        required
-                      />
-                    </div>
-                    <form className="text-start">
-                      <div className="mb-3">
-                        <label htmlFor="title" className="form-label">
-                          商品名稱 <span className="text-danger">*</span>
+                    <div className="col-4">
+                      <div className="mb-3 me-4 text-start">
+                        <label htmlFor="inputUrl" className="form-label">
+                          主圖<span className="text-danger">*</span>
                         </label>
                         <input
+                          name="imageUrl"
                           type="text"
                           className="form-control"
-                          id="inputTitle"
-                          aria-describedby="titleHelp"
-                          value={tempProduct?.title || ""}
-                          onChange={(e) =>
-                            setTempProduct({
-                              ...tempProduct,
-                              title: e.target.value,
-                            })
-                          }
-                        />
-                        <div id="titleHelp" className="form-text" required>
-                          格式 [買/賣]商品名稱
-                        </div>
-                      </div>
-                      <label htmlFor="title" className="select-label">
-                        商品類別 <span className="text-danger">*</span>
-                      </label>
-                      <select
-                        className="form-select mb-3"
-                        aria-label="Default select category"
-                        required
-                      >
-                        <option selected></option>
-                        <option value="Pitcher">投手</option>
-                        <option value="Hitter">野手</option>
-                        <option value="AllStar">明星</option>
-                        <option value="Rookie">新秀</option>
-                      </select>
-                      <div className="mb-3">
-                        <label htmlFor="inputContent" className="form-label">
-                          商品內容
-                        </label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          id="inputContent"
-                        />
-                      </div>
-                      <div className="mb-3">
-                        <label
-                          htmlFor="inputDescription"
-                          className="form-label"
-                        >
-                          商品敘述
-                        </label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          id="inputDescription"
-                        />
-                      </div>
-
-                      <div className="mb-3">
-                        <label htmlFor="inputPrice" className="form-label">
-                          價格<span className="text-danger">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          className="form-control"
-                          id="inputPrice"
                           required
+                          value={formProduct.imageUrl}
+                          // 同一個表單送出到同一個函式，比較好維護
+                          onChange={handleModalInputChange}
                         />
                       </div>
-                    </form>
+                    </div>
+                    <div className="col-8">
+                      <form className="text-start row row-cols-2">
+                        <div className="col">
+                          <div className="mb-3">
+                            <label htmlFor="title" className="form-label">
+                              商品名稱 <span className="text-danger">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              name="title"
+                              className="form-control"
+                              id="inputTitle"
+                              aria-describedby="titleHelp"
+                              value={formProduct.title}
+                              onChange={handleModalInputChange}
+                            />
+                            <div id="titleHelp" className="form-text" required>
+                              格式 [買/賣]商品名稱
+                            </div>
+                          </div>
+                        </div>
+                        <div className="col">
+                          <label htmlFor="title" className="select-label mb-2">
+                            商品類別 <span className="text-danger">*</span>
+                          </label>
+                          <select
+                            className="form-select mb-3"
+                            name="category"
+                            aria-label="Default select category"
+                            value={formProduct.category}
+                            onChange={handleModalInputChange}
+                            required
+                          >
+                            <option defaultValue="default"></option>
+                            <option value="投手">投手</option>
+                            <option value="野手">野手</option>
+                            <option value="明星">明星</option>
+                            <option value="新秀">新秀</option>
+                          </select>
+                        </div>
+                        <div className="mb-3">
+                          <label htmlFor="inputContent" className="form-label">
+                            商品內容
+                          </label>
+                          <input
+                            type="text"
+                            name="content"
+                            className="form-control"
+                            id="inputContent"
+                            value={formProduct.content}
+                            onChange={handleModalInputChange}
+                          />
+                        </div>
+                        <div className="mb-3">
+                          <label
+                            htmlFor="inputDescription"
+                            className="form-label"
+                          >
+                            商品敘述
+                          </label>
+                          <input
+                            type="text"
+                            name="description"
+                            className="form-control"
+                            id="inputDescription"
+                            value={formProduct.description}
+                            onChange={handleModalInputChange}
+                          />
+                        </div>
+
+                        <div className="mb-3">
+                          <label
+                            htmlFor="inputOriginPrice"
+                            className="form-label"
+                          >
+                            原價<span className="text-danger">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            className="form-control"
+                            name="origin_price"
+                            id="inputOriginPrice"
+                            required
+                            min="0"
+                            value={formProduct?.origin_price}
+                            onChange={handleModalInputChange}
+                          />
+                        </div>
+
+                        <div className="mb-3">
+                          <label htmlFor="inputPrice" className="form-label">
+                            折價<span className="text-danger">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            className="form-control"
+                            name="price"
+                            id="inputPrice"
+                            required
+                            min="0"
+                            value={formProduct.price}
+                            onChange={handleModalInputChange}
+                          />
+                        </div>
+                        <div className="mb-3">
+                          <label
+                            htmlFor="inputStorageNum"
+                            className="form-label"
+                          >
+                            庫存數量<span className="text-danger">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            name="storageNum"
+                            className="form-control"
+                            id="inputStorageNum"
+                            required
+                            min="0"
+                            value={formProduct.storageNum}
+                            onChange={handleModalInputChange}
+                          />
+                        </div>
+                        {/* <div className="mb-3">
+                          <label
+                            htmlFor="inputStorageNum"
+                            className="form-label"
+                          >
+                            庫存數量<span className="text-danger">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            className="form-control"
+                            id="inputStorageNum"
+                            required
+                            min="0"
+                            value={formProduct.storageNum}
+                            onChange={handleModalInputChange}
+                          />
+                        </div> */}
+                        <div className="form-check ms-2">
+                          <input
+                            type="checkbox"
+                            className="form-check-input"
+                            id="validationFormCheck2"
+                            name="is_enabled"
+                            required
+                            value={formProduct.is_enabled}
+                            onChange={handleModalInputChange}
+                          />
+                          <label
+                            className="form-check-label"
+                            htmlFor="validationFormCheck2"
+                          >
+                            是否販售<span className="text-danger">*</span>
+                          </label>
+                        </div>
+                      </form>
+                    </div>
                   </div>
                   <div className="modal-footer d-flex justify-content-between">
                     <p>
@@ -298,9 +432,10 @@ function App() {
                       type="button"
                       className="btn btn-primary"
                       data-bs-dismiss="modal"
-                      onClick={handleAdd}
+                      onClick={handleSubmit}
                     >
-                      新增
+                      {/* 文字隨modalType狀態改變 */}
+                      {modalType === "create" ? "新增" : "更新"}
                     </button>
                   </div>
                 </div>
@@ -397,14 +532,14 @@ function App() {
                   </div>
                   <div className="modal-body text-start">
                     <p>{tempProduct.description} </p>
-                    {tempProduct.imagesUrl.map((img, index) => {
+                    {tempProduct.imagesUrl?.map((img, index) => {
                       return (
                         <img src={img} alt={tempProduct.title} key={index} />
                       );
                     })}
                     <p className="mt-2 mb-0">
                       {tempProduct.is_enabled
-                        ? `庫存 1 ${tempProduct.unit}`
+                        ? `庫存 ${tempProduct.storageNum} ${tempProduct.unit}`
                         : "已售完"}
                     </p>
                     <p>
@@ -421,8 +556,10 @@ function App() {
                       <button
                         type="button"
                         className="btn btn-primary"
-                        onClick={() => handleEdit(tempProduct)}
+                        onClick={() => openFormModal(tempProduct, "edit")}
                         id={tempProduct.id}
+                        data-bs-dismiss="modal"
+                        aria-label="Close"
                       >
                         編輯
                       </button>
